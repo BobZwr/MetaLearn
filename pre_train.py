@@ -184,5 +184,5 @@ if __name__ == '__main__':
     MAMLtrain(model=model, xset = train_data, yset = train_label, lr = 1e-3, shots= 10, tasks= 20, update = 10)
     model.test = torch.load('raw.pkl')
     model_test.to('cuda' if torch.cuda.is_available() else 'cpu')
-    TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 10, tasks = 20, update = 10)
+    TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 10, update = 10)
     print('save success')
