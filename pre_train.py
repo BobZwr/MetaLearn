@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-
+import copy
 import dataprocess as dp
 import MAML
 
@@ -23,10 +23,10 @@ def accuracy(predictions, targets):
     acc /= len(targets)
     return acc.item()
 
-def pre_training(model, xset, yset, lr, shots, tasks, update, ways = 2, first_order = True, batch_size = 1):
+def MAMLtrain(model, xset, yset, lr, shots, tasks, update, ways = 2, first_order = True, batch_size = 1):
     '''
     ** Description
-        the main function to pre_train
+        the main function to pre_train using meta learning
     :param model: model
     :param xset: data set
     :param yset: label set
@@ -86,9 +86,9 @@ def pre_training(model, xset, yset, lr, shots, tasks, update, ways = 2, first_or
             prog_iter = tqdm(dataloader, desc = 'Epoch', leave = False, colour = 'Yellow')
             for batch_idx, batch in enumerate(prog_iter):
                 input_x, input_y = tuple(t.to(device) for t in batch)
-                pred = model(input_x)
+                pred = learner(input_x)
                 loss = loss_func(pred, input_y)
-                learner.adapt(loss=loss / len(input_x), first_order=first_order)
+                learner.adapt(loss=loss / batch_size, first_order=first_order)
 
             print("train finish-----------------------")
             # test
@@ -109,6 +109,59 @@ def pre_training(model, xset, yset, lr, shots, tasks, update, ways = 2, first_or
     torch.save(model, 'metalearning.pkl')
     return
 
+def TRADITION(model, xset, yset, lr, shots, update, batch_size = 1):
+    '''
+    ** Description **
+    the main part to pre train the model using traditional method
+    :param model: model
+    :param xset: data
+    :param yset: label
+    :param lr: learning rate
+    :param shots: number of shots according to meta learning
+    :param update: the number to update the model during training
+    :param batch_size: batch size
+    :return:
+    '''
+    xset, yset = dp.pair_shuffle(data=xset, label=yset)
+    train_x = xset[: len(xset) * 3 // 4 - 1]
+    train_y = yset[: len(yset) * 3 // 4 - 1]
+    valid_x = xset[len(xset) * 3 // 4:]
+    valid_y = yset[len(yset) * 3 // 4:]
+
+    device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
+    optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-3)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
+    loss_func = torch.nn.CrossEntropyLoss()
+    train_data = np.array()
+    train_label = np.array()
+    for i in range(len(train_x)):
+        tmp_data, tmp_label, _, _ = dp.FilterNwaysKshots(data = train_x[i],
+                                                         label = train_y[i],
+                                                         N = ways,
+                                                         train_shots = 2 * batch_size * shots,
+                                                         test_shots = 0)
+        train_data = np.append(train_data, tmp_data)
+        train_label = np.append(train_label, tmp_label)
+
+    train_data = np.expand_dims(train_data, 1)
+    dataset = MyDataset(train_data, train_label)
+    dataloader = DataLoader(dataset, batch_size=batch_size)
+
+    # train
+    model.train()
+    for _ in tqdm(range(update), desc='n_update', leave=False, colour='white'):
+        prog_iter = tqdm(dataloader, desc='Epoch', leave=False, colour='Yellow')
+        for batch_idx, batch in enumerate(prog_iter):
+            input_x, input_y = tuple(t.to(device) for t in batch)
+            pred = model(input_x)
+            loss = loss_func(pred, input_y)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        scheduler.step(_)
+
+    torch.save(model, 'traditional.pkl')
+    return
 
 if __name__ == '__main__':
     train_data = np.load('data/train_data.npy', allow_pickle = True)
@@ -124,7 +177,12 @@ if __name__ == '__main__':
         groups_width=32,
         verbose=False,
         n_classes=2)
+    torch.save(model, 'raw.pkl')
     model.to('cuda' if torch.cuda.is_available() else 'cpu')
-    pre_training(model=model, xset = train_data, yset = train_label, lr = 1e-3, shots= 10, tasks= 20, update = 10)
-
+    model_test = torch.load('raw.pkl')
+    model_test.to('cuda' if torch.cuda.is_available() else 'cpu')
+    MAMLtrain(model=model, xset = train_data, yset = train_label, lr = 1e-3, shots= 10, tasks= 20, update = 10)
+    model.test = torch.load('raw.pkl')
+    model_test.to('cuda' if torch.cuda.is_available() else 'cpu')
+    TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 10, tasks = 20, update = 10)
     print('save success')

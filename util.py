@@ -49,8 +49,8 @@ def update_module(module, updates = None):
     #Update the params
     for key in module._parameters:
         value = module._parameters[key]
-        if value is not None and hasattr(value, 'update') and p.update is not None:
-            module.parameters[key] = value + value.update
+        if value is not None and hasattr(value, 'update') and value.update is not None:
+            module._parameters[key] = value + value.update
 
     #recurse for each submodule
     for module_key in module._modules:

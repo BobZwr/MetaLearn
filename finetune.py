@@ -84,6 +84,16 @@ def fine_tune(model, data, label, lr, classes, n_epoch, train_size = 5, batch_si
 
     return AUC
 
+def tes_para(para, data, label):
+    AUC_array = []
+    for i in tdqm(range(len(data)), desc = para + '_Task'):
+        model = torch.load(para)
+        auc = fine_tune(model=model, data=np.array(adapt_data[i]), label=np.array(adapt_label[i]), lr=1e-3, classes=2,
+                        n_epoch=20, train_size=10)
+        AUC_array.append(auc)
+    print('***para:')
+    print(AUC_array)
+    print(sum(AUC_array) / len(AUC_array))
 
 if __name__ == '__main__':
     adapt_data = np.load('data/adapt_data.npy', allow_pickle=True)
@@ -91,9 +101,10 @@ if __name__ == '__main__':
     AUC_array = []
     for i in tqdm(range(len(adapt_data)), desc='Task'):
         model = torch.load('metalearning.pkl')
-        auc = fine_tune(model = model, data = np.array(adapt_data[i]), label = np.array(adapt_label[i]), lr = 1e-3, classes = 2, n_epoch = 10, train_size= 10)
+        auc = fine_tune(model = model, data = np.array(adapt_data[i]), label = np.array(adapt_label[i]), lr = 1e-3, classes = 2, n_epoch = 20, train_size= 10)
         AUC_array.append(auc)
 
     print(AUC_array)
     print(sum(AUC_array) / len(AUC_array))
+
     exit(0)

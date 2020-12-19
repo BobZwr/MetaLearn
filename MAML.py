@@ -10,10 +10,7 @@ class BaseLearner(nn.Module):
         self.model = module
 
     def __getattr__(self, attr):
-        try:
-            return super(BaseLearner, self).__getattr__(attr)
-        except AttributeError:
-            return getattr(self.__dict__['_modules']['module'], attr)
+        return super(BaseLearner, self).__getattr__(attr)
 
     def forward(self, *args, **kwargs):
         return self.module(*args, **kwargs)
