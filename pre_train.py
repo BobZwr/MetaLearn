@@ -50,8 +50,10 @@ def MAMLtrain(model, xset, yset, lr, shots, tasks, update, ways = 2, first_order
 
     model = MAML.MAML(model, lr, first_order)
     device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
+    model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-3)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
+
     loss_func = torch.nn.CrossEntropyLoss()
 
     for task_index in tqdm(list(i for i in range(tasks)), desc = 'Task', position = 1):
@@ -83,7 +85,7 @@ def MAMLtrain(model, xset, yset, lr, shots, tasks, update, ways = 2, first_order
         for _ in tqdm(range(update), desc = 'update_num', leave = False, colour = 'white'):
             learner.train()
             # train
-            prog_iter = tqdm(dataloader, desc = 'Epoch', leave = False, colour = 'Yellow')
+            prog_iter = tqdm(dataloader, desc = 'Epoch', leave = False, colour = 'yellow')
             for batch_idx, batch in enumerate(prog_iter):
                 input_x, input_y = tuple(t.to(device) for t in batch)
                 pred = learner(input_x)
@@ -128,6 +130,7 @@ def TRADITION(model, xset, yset, lr, shots, update, batch_size = 1, ways = 2 ):
     valid_y = yset[len(yset) * 3 // 4:]
 
     device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
+    model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-3)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
     loss_func = torch.nn.CrossEntropyLoss()
@@ -195,10 +198,8 @@ if __name__ == '__main__':
         verbose=False,
         n_classes=2)
     model_test.load_state_dict(model.state_dict())
-    model_test.to('cuda' if torch.cuda.is_available() else 'cpu')
-    MAMLtrain(model=model, xset = train_data, yset = train_label, lr = 1e-3, shots= 5, tasks= 25, update = 10)
+#MAMLtrain(model=model_test, xset = train_data, yset = train_label, lr = 1e-3, shots=5, tasks= 25, update = 10)
 
     model_test.load_state_dict(model.state_dict())
-    model_test.to('cuda' if torch.cuda.is_available() else 'cpu')
     TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 5, update = 10)
     print('save success')

@@ -200,7 +200,7 @@ def preprocess_data(path, save_path, prefix):
 
 if __name__ == "__main__":
     save_path = 'data/'
-    source = 1
+    source = 0
     if not source:
         path = 'data/mit-bih-arrhythmia-database-1.0.0'
         prefix = 'mitdb'

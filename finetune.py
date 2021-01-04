@@ -49,7 +49,7 @@ def fine_tune(model, data, label, lr, classes, n_epoch, train_size = 5, batch_si
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
     loss_func = torch.nn.CrossEntropyLoss()
     device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
-
+    model.to(device)
     #train
     model.train()
     for _ in tqdm(range(n_epoch), desc="epoch", leave=False):
@@ -97,8 +97,7 @@ def test_para(para, data, label):
     return sum(AUC_array) / len(AUC_array)
 
 if __name__ == '__main__':
-    adapt_data = np.l
-    oad('data/adapt_data.npy', allow_pickle=True)
+    adapt_data = np.load('data/adapt_data.npy', allow_pickle=True)
     adapt_label = np.load('data/adapt_label.npy', allow_pickle=True)
 
     netmodel = ['metalearning', 'traditional']
