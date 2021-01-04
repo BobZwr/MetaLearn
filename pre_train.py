@@ -198,7 +198,7 @@ if __name__ == '__main__':
         verbose=False,
         n_classes=2)
     model_test.load_state_dict(model.state_dict())
-#MAMLtrain(model=model_test, xset = train_data, yset = train_label, lr = 1e-3, shots=5, tasks= 25, update = 10)
+    MAMLtrain(model=model_test, xset = train_data, yset = train_label, lr = 1e-3, shots=5, tasks= 25, update = 10)
 
     model_test.load_state_dict(model.state_dict())
     TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 5, update = 10)
