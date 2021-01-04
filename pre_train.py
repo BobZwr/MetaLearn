@@ -100,7 +100,6 @@ def MAMLtrain(model, xset, yset, lr, shots, tasks, update, ways = 2, first_order
                 loss = loss_func(pred, y)
                 pred = pred.argmax(dim = 1)
                 sum_loss += loss / batch_size
-
         sum_loss /= shots
         optimizer.zero_grad()
         sum_loss.backward()
@@ -109,7 +108,7 @@ def MAMLtrain(model, xset, yset, lr, shots, tasks, update, ways = 2, first_order
     torch.save(model, 'metalearning.pkl')
     return
 
-def TRADITION(model, xset, yset, lr, shots, update, batch_size = 1):
+def TRADITION(model, xset, yset, lr, shots, update, batch_size = 1, ways = 2 ):
     '''
     ** Description **
     the main part to pre train the model using traditional method
@@ -132,18 +131,23 @@ def TRADITION(model, xset, yset, lr, shots, update, batch_size = 1):
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-3)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
     loss_func = torch.nn.CrossEntropyLoss()
-    train_data = np.array()
-    train_label = np.array()
-    for i in range(len(train_x)):
-        tmp_data, tmp_label, _, _ = dp.FilterNwaysKshots(data = train_x[i],
-                                                         label = train_y[i],
+    train_data, train_label, _, _ = dp.FilterNwaysKshots(data = np.array(train_x[0]),
+                                                         label = np.array(train_y[0]),
                                                          N = ways,
                                                          train_shots = 2 * batch_size * shots,
                                                          test_shots = 0)
-        train_data = np.append(train_data, tmp_data)
-        train_label = np.append(train_label, tmp_label)
 
+    for i in range(1, len(train_x)):
+        tmp_data, tmp_label, _, _ = dp.FilterNwaysKshots(data = np.array(train_x[i]),
+                                                         label = np.array(train_y[i]),
+                                                         N = ways,
+                                                         train_shots = 2 * batch_size * shots,
+                                                         test_shots = 0)
+        train_data = np.append(train_data, tmp_data,axis=0)
+        train_label = np.append(train_label, tmp_label)
+    print(train_data)
     train_data = np.expand_dims(train_data, 1)
+
     dataset = MyDataset(train_data, train_label)
     dataloader = DataLoader(dataset, batch_size=batch_size)
 
@@ -178,11 +182,23 @@ if __name__ == '__main__':
         verbose=False,
         n_classes=2)
     torch.save(model, 'raw.pkl')
-    model.to('cuda' if torch.cuda.is_available() else 'cpu')
-    model_test = torch.load('raw.pkl')
+
+    model_test = Net1D(
+        in_channels=1,
+        base_filters=128,
+        ratio=1.0,
+        filter_list=[128, 64, 64, 32, 32],
+        m_blocks_list=[2, 2, 2, 2, 2],
+        kernel_size=16,
+        stride=2,
+        groups_width=32,
+        verbose=False,
+        n_classes=2)
+    model_test.load_state_dict(model.state_dict())
     model_test.to('cuda' if torch.cuda.is_available() else 'cpu')
-    MAMLtrain(model=model, xset = train_data, yset = train_label, lr = 1e-3, shots= 10, tasks= 20, update = 10)
-    model.test = torch.load('raw.pkl')
+    MAMLtrain(model=model, xset = train_data, yset = train_label, lr = 1e-3, shots= 5, tasks= 25, update = 10)
+
+    model_test.load_state_dict(model.state_dict())
     model_test.to('cuda' if torch.cuda.is_available() else 'cpu')
-    TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 10, update = 10)
+    TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 5, update = 10)
     print('save success')

@@ -93,7 +93,6 @@ def FilterNwaysKshots(data, label, N, train_shots, test_shots = 1, remain = Fals
     test_y = []
     remain_x = []
     remain_y = []
-    print(type(label))
     for i in name[0 : N]:
         is_name = label == i
         l, d = label[is_name], data[is_name]
