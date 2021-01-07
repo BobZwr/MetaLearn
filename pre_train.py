@@ -129,7 +129,7 @@ def TRADITION(model, xset, yset, lr, shots, update, batch_size = 1, ways = 2 ):
     valid_x = xset[len(xset) * 3 // 4:]
     valid_y = yset[len(yset) * 3 // 4:]
 
-    device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
+    device = torch.device('cpu')#torch.device('cuda' if torch.cuda.is_available() else "cpu")
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-3)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
@@ -201,5 +201,5 @@ if __name__ == '__main__':
     MAMLtrain(model=model_test, xset = train_data, yset = train_label, lr = 1e-3, shots=5, tasks= 25, update = 10)
 
     model_test.load_state_dict(model.state_dict())
-    TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 5, update = 10)
+    #TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 5, update = 10)
     print('save success')
