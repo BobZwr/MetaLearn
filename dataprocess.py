@@ -56,6 +56,9 @@ def create_sets(train_size):
     for i in TmpLabel:
         Label.append(list(int('VF/VT' in j) for j in i))
     Label = np.array(Label)
+    index = np.random.permutation(len(Label))
+    Data = Data[index]
+    Label = Label[index]
 
     ## scale data
     for i in range(len(Data)):

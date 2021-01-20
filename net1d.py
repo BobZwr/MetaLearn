@@ -6,7 +6,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import math
 from torch.utils.data import Dataset
+from torch.nn.parameter import Parameter
 
 
 class MyDataset(Dataset):
@@ -20,6 +22,36 @@ class MyDataset(Dataset):
     def __len__(self):
         return len(self.data)
 
+class Conv1dMTL(nn.Conv1d):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, groups):
+        super(Conv1dMTL, self).__init__(in_channels=in_channels,out_channels= out_channels,kernel_size= kernel_size,stride= stride,groups= groups)
+        self.mtl_w = Parameter(torch.ones( out_channels ,in_channels// groups, 1))
+        self.weight.requires_grad = False
+        self.mtl_b = Parameter(torch.zeros(out_channels))
+        self.bias.requires_grad = False
+        self.reset_parameter()
+
+
+
+    def reset_parameter(self):
+        n = self.in_channels
+        for k in self.kernel_size:
+            n *= k
+        stdv = 1. / math.sqrt(n)
+        self.weight.data.uniform_(-stdv, stdv)
+        self.mtl_w.data.uniform_(1, 1)
+        if self.bias is not None:
+            self.bias.data.uniform_(-stdv, stdv)
+            self.mtl_b.data.uniform_(0, 0)
+
+    def forward(self, x):
+        new_mtl_w = self.mtl_w.expand(self.weight.shape)
+        new_weight = self.weight.mul(new_mtl_w)
+        if self.bias is not None:
+            new_bias = self.bias + self.mtl_b
+        else:
+            new_bias = None
+        return nn.functional.conv1d(x, weight=new_weight, bias=new_bias, stride=self.stride,padding= self.padding,dilation= self.dilation,groups= self.groups)
 
 class MyConv1dPadSame(nn.Module):
     """
@@ -28,19 +60,28 @@ class MyConv1dPadSame(nn.Module):
     output: (n_sample, out_channels, (n_length+stride-1)//stride)
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride, groups=1):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, groups=1, mtl = False):
         super(MyConv1dPadSame, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         self.stride = stride
         self.groups = groups
-        self.conv = torch.nn.Conv1d(
-            in_channels=self.in_channels,
-            out_channels=self.out_channels,
-            kernel_size=self.kernel_size,
-            stride=self.stride,
-            groups=self.groups)
+        if mtl:
+            self.conv = Conv1dMTL(
+                in_channels=self.in_channels,
+                out_channels=self.out_channels,
+                kernel_size=self.kernel_size,
+                stride=self.stride,
+                groups=self.groups)
+        else:
+            self.conv = nn.Conv1d(
+                in_channels=self.in_channels,
+                out_channels = self.out_channels,
+                kernel_size = self.kernel_size,
+                stride = self.stride,
+                groups= self.groups
+            )
 
     def forward(self, x):
         net = x
@@ -111,9 +152,9 @@ class BasicBlock(nn.Module):
     """
 
     def __init__(self, in_channels, out_channels, ratio, kernel_size, stride, groups, downsample, is_first_block=False,
-                 use_bn=True, use_do=True):
+                 use_bn=True, use_do=True, mtl = False):
         super(BasicBlock, self).__init__()
-
+        self.mtl = mtl
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.ratio = ratio
@@ -136,7 +177,8 @@ class BasicBlock(nn.Module):
             out_channels=self.middle_channels,
             kernel_size=1,
             stride=1,
-            groups=1)
+            groups=1,
+            mtl = self.mtl)
 
         # the second conv, convk
         self.bn2 = nn.BatchNorm1d(self.middle_channels)
@@ -147,7 +189,8 @@ class BasicBlock(nn.Module):
             out_channels=self.middle_channels,
             kernel_size=self.kernel_size,
             stride=self.stride,
-            groups=self.groups)
+            groups=self.groups,
+            mtl=self.mtl)
 
         # the third conv, conv1
         self.bn3 = nn.BatchNorm1d(self.middle_channels)
@@ -158,7 +201,8 @@ class BasicBlock(nn.Module):
             out_channels=self.out_channels,
             kernel_size=1,
             stride=1,
-            groups=1)
+            groups=1,
+            mtl=self.mtl)
 
         # Squeeze-and-Excitation
         r = 2
@@ -232,9 +276,10 @@ class BasicStage(nn.Module):
     """
 
     def __init__(self, in_channels, out_channels, ratio, kernel_size, stride, groups, i_stage, m_blocks, use_bn=True,
-                 use_do=True, verbose=False):
+                 use_do=True, verbose=False, mtl = False):
         super(BasicStage, self).__init__()
 
+        self.mtl = mtl
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.ratio = ratio
@@ -275,8 +320,10 @@ class BasicStage(nn.Module):
                 downsample=self.downsample,
                 is_first_block=self.is_first_block,
                 use_bn=self.use_bn,
-                use_do=self.use_do)
+                use_do=self.use_do,
+                mtl = self.mtl)
             self.block_list.append(tmp_block)
+
 
     def forward(self, x):
 
@@ -310,7 +357,7 @@ class BasicStage(nn.Module):
         return out
 
 
-class Net1D(nn.Module):
+class Net1DnoFC(nn.Module):
     """
 
     Input:
@@ -335,9 +382,10 @@ class Net1D(nn.Module):
     """
 
     def __init__(self, in_channels, base_filters, ratio, filter_list, m_blocks_list, kernel_size, stride, groups_width,
-                 n_classes, use_bn=True, use_do=True, verbose=False):
-        super(Net1D, self).__init__()
+                 n_classes, use_bn=True, use_do=True, verbose=False, mtl = False):
+        super(Net1DnoFC, self).__init__()
 
+        self.mtl = mtl
         self.in_channels = in_channels
         self.base_filters = base_filters
         self.ratio = ratio
@@ -357,7 +405,8 @@ class Net1D(nn.Module):
             in_channels=in_channels,
             out_channels=self.base_filters,
             kernel_size=self.kernel_size,
-            stride=2)
+            stride=2,
+            mtl = self.mtl)
         self.first_bn = nn.BatchNorm1d(base_filters)
         self.first_activation = Swish()
 
@@ -378,12 +427,12 @@ class Net1D(nn.Module):
                 m_blocks=m_blocks,
                 use_bn=self.use_bn,
                 use_do=self.use_do,
-                verbose=self.verbose)
+                verbose=self.verbose,
+                mtl = self.mtl)
             self.stage_list.append(tmp_stage)
             in_channels = out_channels
 
-        # final prediction
-        self.dense = nn.Linear(in_channels, n_classes)
+        # final predictio
 
     def forward(self, x):
 
@@ -400,6 +449,33 @@ class Net1D(nn.Module):
             net = self.stage_list[i_stage]
             out = net(out)
 
+        # final prediction
+
+
+        return out
+
+class Net1D(nn.Module):
+    def __init__(self, in_channels, base_filters, ratio, filter_list, m_blocks_list, kernel_size, stride, groups_width,
+                 n_classes, use_bn=True, use_do=True, verbose=False, mtl = False):
+        super(Net1D, self).__init__()
+
+        self.mtl = mtl
+        self.Conv = Net1DnoFC(in_channels,base_filters,ratio,filter_list,m_blocks_list,kernel_size,stride,groups_width,
+                              n_classes,use_bn,use_do,verbose,mtl)
+        if mtl:
+            for i, j in self.Conv.named_parameters():
+                if j.requires_grad:
+                    if 'mtl_w' not in i and 'mtl_b' not in i:
+                        j.requires_grad_(False)
+        self.in_channels = self.Conv.filter_list[-1]
+        if not mtl:
+            self.dense = nn.Linear(self.in_channels, n_classes)
+        else:
+            self.dense = None
+
+    def forward(self, x):
+
+        out = self.Conv(x)
         # final prediction
         out = out.mean(-1)
         out = self.dense(out)

@@ -16,6 +16,8 @@ from torch.utils.data import DataLoader
 import copy
 import dataprocess as dp
 import MAML
+import args
+import MTL
 
 def accuracy(predictions, targets):
     predictions = predictions.argmax(dim=1)
@@ -168,7 +170,72 @@ def TRADITION(model, xset, yset, lr, shots, update, batch_size = 1, ways = 2 ):
         scheduler.step(_)
 
     torch.save(model, 'traditional.pkl')
+    torch.save(model.Conv, 'preMTL.pkl')
     return
+
+def MTLTrain(xset, yset, args = args.MTL):
+    xset, yset = dp.pair_shuffle(data = xset, label = yset)
+    train_x = xset[ : len(xset)*3 // 4 - 1]
+    train_y = yset[ : len(yset)*3 // 4 - 1]
+    valid_x = xset[len(xset)*3 // 4 : ]
+    valid_y = yset[len(yset)*3 // 4 : ]
+
+    model = MTL.MtlLearner(lr=args['inlr'], update_step=args['update'])
+    device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
+    model.to(device)
+
+    tasks = args['tasks']
+    ways = args['ways']
+    batch_size = args['batch_size']
+    shots = args['shots']
+
+    #load pretrained model without FC classifier
+    model_dict = model.state_dict()
+    pretrained_dict = torch.load('preMTL.pkl')
+    pretrained_dict = {'model.Conv.'+k : v for k, v in pretrained_dict.state_dict().items()}
+    pretrained_dict = {k: v for k,v in pretrained_dict.items() if k in model_dict.keys()}
+    model_dict.update(pretrained_dict)
+    model.load_state_dict(model_dict)
+
+    optimizer = optim.Adam([{'params': filter(lambda p: p.requires_grad, model.encoder.parameters())},
+                            {'params': model.base_learner.parameters(), 'lr': 1e-3}], lr=1e-3, weight_decay=1e-3)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
+    loss_func = torch.nn.CrossEntropyLoss()
+    MetaTaskIndex = np.random.permutation(len(train_x))[0: tasks]
+    for task_index in tqdm(list(i for i in range(args['tasks'])), desc = 'Task', position = 1):
+
+        data = train_x[MetaTaskIndex[task_index]]
+        label = train_y[MetaTaskIndex[task_index]]
+        label = np.array(label)
+        # XTrain, XTest, YTrain, YTest = train_test_split(train_x[MetaTaskIndex],     ## TODO: (2)
+        #                                                 train_y[MetaTaskIndex],
+        #                                                 train_size=
+        #                                                 )
+
+        # sample shots (may be replaced by mini-batch)
+
+        train_data, train_label, test_data, test_label = dp.FilterNwaysKshots(data,
+                                           label,
+                                           N = ways,
+                                           train_shots = batch_size * shots,
+                                           test_shots= batch_size)
+        train_data = np.expand_dims(train_data, 1)
+        test_data = np.expand_dims(test_data, 1)
+        sum_loss = 0.0
+        dataset = MyDataset(train_data, train_label)
+        dataset_test = MyDataset(test_data, test_label)
+        dataloader = DataLoader(dataset, batch_size=batch_size)
+        dataloader_test = DataLoader(dataset_test, batch_size=batch_size)
+
+        logits = model.model((train_data, train_label, test_data))
+        loss = loss_func(logits, test_label)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+    torch.save(model, 'MTL.pkl')
+    return
+
 
 if __name__ == '__main__':
     train_data = np.load('data/train_data.npy', allow_pickle = True)
@@ -201,5 +268,8 @@ if __name__ == '__main__':
     MAMLtrain(model=model_test, xset = train_data, yset = train_label, lr = 1e-3, shots=5, tasks= 25, update = 10)
 
     model_test.load_state_dict(model.state_dict())
-    #TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 5, update = 10)
+    TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 5, update = 10)
+
+    model_test.load_state_dict(model.state_dict())
+    MTLTrain(xset = train_data, yset= train_label)
     print('save success')

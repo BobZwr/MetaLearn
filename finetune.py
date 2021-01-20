@@ -13,14 +13,13 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-
+import MAML
 import dataprocess as dp
 
 def fine_tune(model, data, label, lr, classes, n_epoch, train_size = 5, batch_size = 1):
     '''
     ** Description **
     The main part of fine tune(quickly adaptation)
-
     :param model:
     :param data:
     :param label:
@@ -192,24 +191,28 @@ def test_para(para, data, label):
     for i in tqdm(range(len(data)), desc = para + '_Task'):
         model = torch.load(para + '.pkl')
         auc = fine_tune(model=model, data=np.array(adapt_data[i]), label=np.array(adapt_label[i]), lr=1e-3, classes=2,
-                        n_epoch=10, train_size = 5)
-        auc1 = fine_tune2(model=model, data=np.array(adapt_data[i]), label=np.array(adapt_label[i]), lr=1e-3, classes=2,
+                        n_epoch= 10 , train_size = 5)
+        if para == 'metalearning':
+            auc1 = fine_tune2(model=model, data=np.array(adapt_data[i]), label=np.array(adapt_label[i]), lr=1e-3, classes=2,
                         n_epoch=5, train_size = 5)
+            AUC_array2.append(auc1)
         AUC_array.append(auc)
-        AUC_array2.append(auc1)
+
     print('***para:' + para)
     print(AUC_array)
-    print(sum(AUC_array) / len(AUC_array))
     print("traditional:%f, new:%f" % (sum(AUC_array),sum(AUC_array2)))
-    return (sum(AUC_array)-sum(AUC_array2)) / len(AUC_array)
+    if para == 'metalearning':
+        return [sum(AUC_array)/len(AUC_array), sum(AUC_array2)/len(AUC_array2)]
+    else:
+        return sum(AUC_array) / len(AUC_array)
 
 if __name__ == '__main__':
     adapt_data = np.load('data/adapt_data.npy', allow_pickle=True)
     adapt_label = np.load('data/adapt_label.npy', allow_pickle=True)
     netmodel = ['metalearning', 'traditional']
     mean = []
-    for i in netmodel[:1]:
-        for j in range(5):
+    for i in netmodel:
+        for j in range(10):
             auc = test_para(para = i, data = adapt_data, label = adapt_label)
             mean.append(auc)
 
