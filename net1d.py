@@ -476,6 +476,7 @@ class Net1D(nn.Module):
     def forward(self, x):
 
         out = self.Conv(x)
+
         # final prediction
         out = out.mean(-1)
         out = self.dense(out)

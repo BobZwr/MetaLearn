@@ -209,12 +209,15 @@ def test_para(para, data, label):
 if __name__ == '__main__':
     adapt_data = np.load('data/adapt_data.npy', allow_pickle=True)
     adapt_label = np.load('data/adapt_label.npy', allow_pickle=True)
-    netmodel = ['metalearning', 'traditional']
-    mean = []
+    netmodel = ['metalearning', 'traditional', 'MTL']
+
+    result = {}
     for i in netmodel:
+        mean = []
         for j in range(10):
             auc = test_para(para = i, data = adapt_data, label = adapt_label)
             mean.append(auc)
+        result[i] = mean
 
     print(mean)
     exit(0)

@@ -102,8 +102,9 @@ def MAMLtrain(model, xset, yset, lr, shots, tasks, update, ways = 2, first_order
                 x, y = tuple(t.to(device) for t in batch)
                 pred = model(x)
                 loss = loss_func(pred, y)
-                pred = pred.argmax(dim = 1)
+                pred = pred.argmax(dim=1)
                 sum_loss += loss / batch_size
+
         sum_loss /= shots
         optimizer.zero_grad()
         sum_loss.backward()
@@ -221,18 +222,15 @@ def MTLTrain(xset, yset, args = args.MTL):
                                            test_shots= batch_size)
         train_data = np.expand_dims(train_data, 1)
         test_data = np.expand_dims(test_data, 1)
-        sum_loss = 0.0
         dataset = MyDataset(train_data, train_label)
         dataset_test = MyDataset(test_data, test_label)
         dataloader = DataLoader(dataset, batch_size=batch_size)
         dataloader_test = DataLoader(dataset_test, batch_size=batch_size)
-
-        logits = model.model((train_data, train_label, test_data))
-        loss = loss_func(logits, test_label)
+        loss = model(dataloader, dataloader_test) / shots
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        scheduler.step()
+        scheduler.step(task_index)
     torch.save(model, 'MTL.pkl')
     return
 
@@ -264,6 +262,7 @@ if __name__ == '__main__':
         groups_width=32,
         verbose=False,
         n_classes=2)
+
     model_test.load_state_dict(model.state_dict())
     MAMLtrain(model=model_test, xset = train_data, yset = train_label, lr = 1e-3, shots=5, tasks= 25, update = 10)
 
@@ -271,5 +270,5 @@ if __name__ == '__main__':
     TRADITION(model_test, xset = train_data, yset = train_label, lr = 1e-3, shots = 5, update = 10)
 
     model_test.load_state_dict(model.state_dict())
-    MTLTrain(xset = train_data, yset= train_label)
+    MTLTrain(xset=train_data, yset=train_label)
     print('save success')
