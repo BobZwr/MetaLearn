@@ -58,8 +58,8 @@ def MAMLtrain(model, xset, yset, lr, shots, tasks, update, ways = 2, first_order
 
     loss_func = torch.nn.CrossEntropyLoss()
 
+    MetaTaskIndex = np.random.permutation(len(train_x))[0: tasks]
     for task_index in tqdm(list(i for i in range(tasks)), desc = 'Task', position = 1):
-        MetaTaskIndex = np.random.permutation(len(train_x))[0: tasks]
         data = train_x[MetaTaskIndex[task_index]]
         label = train_y[MetaTaskIndex[task_index]]
         label = np.array(label)
@@ -105,7 +105,7 @@ def MAMLtrain(model, xset, yset, lr, shots, tasks, update, ways = 2, first_order
                 pred = pred.argmax(dim=1)
                 sum_loss += loss / batch_size
 
-        sum_loss /= update
+        sum_loss /= update * shots
         optimizer.zero_grad()
         sum_loss.backward()
         optimizer.step()
@@ -227,7 +227,7 @@ def MTLTrain(xset, yset, args = args.MTL):
         dataloader = DataLoader(dataset, batch_size=batch_size)
         dataloader_test = DataLoader(dataset_test, batch_size=batch_size)
 
-        loss = model(dataloader, dataloader_test)
+        loss = model(dataloader, dataloader_test) / shots
 
         optimizer.zero_grad()
         loss.backward()
