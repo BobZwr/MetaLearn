@@ -20,12 +20,15 @@ class BaseLearner(nn.Module):
         self.fc1_b = nn.Parameter(torch.zeros(Network['n_classes']))
         self.vars.append(self.fc1_b)
 
+
     def forward(self, input_x, the_vars=None):
         input_x = input_x.mean(-1)
+        print(input_x.size())
         if the_vars is None:
             the_vars = self.vars
         fc1_w = the_vars[0]
         fc1_b = the_vars[1]
+        print(fc1_w.size())
         net = F.linear(input_x, fc1_w, fc1_b)
         return net
 
@@ -120,7 +123,8 @@ class MtlLearner(nn.Module):
                     pred = self.base_learner(conv)
                     loss = loss_func(pred, input_y)
                     grad = torch.autograd.grad(loss, self.base_learner.parameters())
-                    weights = list(map(lambda p: p[1] - self.update_lr * p[0], zip(grad, self.base_learner.parameters())))
+                    weights = list(map(lambda p: p[1] - self.update_lr
+                                                 * p[0], zip(grad, self.base_learner.parameters())))
                 else:
                     pred = self.base_learner(conv, weights)
                     loss = loss_func(pred, input_y)

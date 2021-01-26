@@ -105,7 +105,7 @@ def MAMLtrain(model, xset, yset, lr, shots, tasks, update, ways = 2, first_order
                 pred = pred.argmax(dim=1)
                 sum_loss += loss / batch_size
 
-        sum_loss /= shots
+        sum_loss /= update
         optimizer.zero_grad()
         sum_loss.backward()
         optimizer.step()
@@ -226,7 +226,9 @@ def MTLTrain(xset, yset, args = args.MTL):
         dataset_test = MyDataset(test_data, test_label)
         dataloader = DataLoader(dataset, batch_size=batch_size)
         dataloader_test = DataLoader(dataset_test, batch_size=batch_size)
-        loss = model(dataloader, dataloader_test) / shots
+
+        loss = model(dataloader, dataloader_test)
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

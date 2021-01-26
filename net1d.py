@@ -24,8 +24,8 @@ class MyDataset(Dataset):
 
 class Conv1dMTL(nn.Conv1d):
     def __init__(self, in_channels, out_channels, kernel_size, stride, groups):
-        super(Conv1dMTL, self).__init__(in_channels=in_channels,out_channels= out_channels,kernel_size= kernel_size,stride= stride,groups= groups)
-        self.mtl_w = Parameter(torch.ones( out_channels ,in_channels// groups, 1))
+        super(Conv1dMTL, self).__init__(in_channels=in_channels, out_channels= out_channels, kernel_size= kernel_size,stride= stride,groups= groups)
+        self.mtl_w = Parameter(torch.ones( out_channels, in_channels // groups, 1))
         self.weight.requires_grad = False
         self.mtl_b = Parameter(torch.zeros(out_channels))
         self.bias.requires_grad = False
