@@ -1,5 +1,9 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import math
+import numpy as np
+from net1d import MyDataset
 
 def clone_module(module):
     # ** Description
@@ -57,5 +61,18 @@ def update_module(module, updates = None):
         module._modules[module_key] = update_module(module._modules[module_key])
 
     return module
+
+def calc_entropy(data, model, device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')):
+    value = 0
+    for task in data:
+        task = np.expand_dims(task, 1)
+        task = np.expand_dims(task, 1)
+        tmp_value = 0
+        for sample in task[ : 3]:
+            pred_prob = F.softmax(model(torch.tensor(sample, dtype=torch.float, device=device)), dim = 1)
+            for i in range(pred_prob.dim()):
+                tmp_value += pred_prob[0,i] * torch.log2(pred_prob[0,i]) / 2  #n_classes = 2
+        value += tmp_value / 3
+    return -value / len(data)
 
 

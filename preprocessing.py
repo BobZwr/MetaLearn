@@ -25,9 +25,6 @@ def bandpass_filter(data, lowcut, highcut, filter_order=4):
         data[0][:,i] = lfilter(b, a, data[0][:,i])
     return data
 
-
-flatten = lambda t: [item for sublist in t for item in sublist]
-
 m = {'N': 'SN',  # Normal beat (displayed as "·" by the PhysioBank ATM, LightWAVE, pschart, and psfd)
      'L': 'LBBB',  # Left bundle branch block beat
      'R': 'RBBB',  # Right bundle branch block beat
@@ -107,8 +104,8 @@ def get_label_map(labels):
 
 def preprocess_data(path, save_path, prefix):
 
-    valid_lead = ['MLII', 'ECG', 'V5', 'V2'] # extract all similar leads
-    fs_out = 500
+    valid_lead = ['MLII', 'ECG'] # extract all similar leads
+    fs_out = 200
     t = 2
     window_size_t = 2 # second
     stride_t = 2 # second
@@ -122,6 +119,7 @@ def preprocess_data(path, save_path, prefix):
         all_record_name = fin.read().strip().split('\n')
 
     for record_name in all_record_name:
+        cnt = 0
         try:
             tmp_ann_res = wfdb.rdann(path + '/' + record_name, 'atr').__dict__
             tmp_data_res = wfdb.rdsamp(path + '/' + record_name)
@@ -160,11 +158,13 @@ def preprocess_data(path, save_path, prefix):
                     if full_aux_list[i] == '':
                         full_aux_list[i] = full_aux_list[i-1] # copy full_aux_list from itself, fill empty strings
                 full_aux_list = np.array(full_aux_list)
+                idx_start = 0
 
-                for idx_start in range(0, len(tmp_data)-window_size, stride):
+                while idx_start <= len(tmp_data) - window_size:
                     idx_end = idx_start+window_size
                     tmpdata = resample_unequal(tmp_data[idx_start:idx_end], fs, fs_out, t)
                     if not -100 < np.mean(tmpdata) < 100:
+                        idx_start += fs
                         continue
                     pp_pid.append("{}".format(record_name))
 
@@ -173,7 +173,13 @@ def preprocess_data(path, save_path, prefix):
                     tmp_label_rhythm = full_aux_list[idx_start:idx_end] # be careful
                     tmp_label = list(np.unique(tmp_label_beat))+list(np.unique(tmp_label_rhythm))
                     tmp_label = get_label_map(tmp_label)
+                    if 'VF/VT' in tmp_label and cnt <= 150:
+                        idx_start += int(0.1 * fs)
+                        cnt += 1
+                    else:
+                        idx_start += 2 * fs
                     pp_label.append(tmp_label)
+
 
                 all_pid.extend(pp_pid)
                 all_data.extend(pp_data)
@@ -200,7 +206,7 @@ def preprocess_data(path, save_path, prefix):
 
 if __name__ == "__main__":
     save_path = 'data/'
-    source = 1
+    source = 0
     if not source:
         path = 'data/mit-bih-arrhythmia-database-1.0.0'
         prefix = 'mitdb'
@@ -214,7 +220,7 @@ if __name__ == "__main__":
         prefix = 'cudb'
         preprocess_data(path, save_path, prefix)
 
-    train_data, adapt_data, train_label, adapt_label = dp.create_sets(train_size=0.8)
+    train_data, adapt_data, train_label, adapt_label = dp.create_sets()
     np.save('data/train_data.npy', train_data)
     np.save('data/adapt_data.npy', adapt_data)
     np.save('data/train_label.npy', train_label)

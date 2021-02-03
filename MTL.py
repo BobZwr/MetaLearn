@@ -23,12 +23,10 @@ class BaseLearner(nn.Module):
 
     def forward(self, input_x, the_vars=None):
         input_x = input_x.mean(-1)
-        print(input_x.size())
         if the_vars is None:
             the_vars = self.vars
         fc1_w = the_vars[0]
         fc1_b = the_vars[1]
-        print(fc1_w.size())
         net = F.linear(input_x, fc1_w, fc1_b)
         return net
 
@@ -54,7 +52,8 @@ class MtlLearner(nn.Module):
                 groups_width=Network['groups_width'],
                 verbose = False,
                 n_classes=Network['n_classes'],
-                mtl= True
+                mtl= True,
+                use_bn=False
             )
         else:
             self.model = Net1D(
@@ -67,7 +66,8 @@ class MtlLearner(nn.Module):
                 stride = Network['stride'],
                 groups_width=Network['groups_width'],
                 verbose = False,
-                n_classes=Network['n_classes']
+                n_classes = Network['n_classes'],
+                use_bn = False
 
             )
         self.encoder = self.model.Conv
@@ -113,10 +113,13 @@ class MtlLearner(nn.Module):
         loss_func = torch.nn.CrossEntropyLoss()
         weights = None
         # train
-        for _ in tqdm(range(self.update_step), desc ='update_num', leave = False, colour = 'red'):
+
+        sum_loss = 0
+        for _ in tqdm(range(self.update_step), desc='update_num', leave=False, colour='red'):
             self.encoder.train()
+            self.base_learner.train()
             prog_iter = tqdm(train, desc='Epoch', leave=False, colour='yellow')
-            for batch_idx, batch in enumerate(prog_iter):
+            for batch_idx, batch in enumerate(train):
                 input_x, input_y = tuple(t.to(device) for t in batch)
                 conv = self.encoder(input_x)
                 if weights == None:
@@ -132,15 +135,15 @@ class MtlLearner(nn.Module):
                     weights = list(map(lambda p: p[1] - self.update_lr * p[0], zip(grad, weights)))
 
             self.encoder.eval()
+            self.base_learner.eval()
             test_task = tqdm(test, desc="Test")
-            sum_loss = 0
-            for batch_idx, batch in enumerate(test_task):
+
+            for batch_idx, batch in enumerate(test):
                 x, y = tuple(t.to(device) for t in batch)
                 pred = self.base_learner(self.encoder(x), weights)
                 loss = loss_func(pred, y)
                 sum_loss += loss / test.batch_size
-        sum_loss /= self.update_step
-        return sum_loss
+        return sum_loss / self.update_step
 
     def preval_forward(self, data_shot, label_shot, data_query):
         """The function to forward meta-validation during pretrain phase.
