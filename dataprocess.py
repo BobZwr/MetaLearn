@@ -6,9 +6,13 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from sklearn.metrics import auc
 
-def check(label):
+def check(label, database):
     # decide whether to adopt the ith data
-    if sum('VF/VT' in i for i in label) > 20:
+    if database == 'mitdb':
+        limit = 50
+    else:
+        limit = 100
+    if sum('VF/VT' in i for i in label) >= limit:
         return True
     return False
 
@@ -27,14 +31,14 @@ def read_data( filename ):
     label = np.load('data/' + filename + '_label.npy', allow_pickle=True)
     name = np.unique(pid)
     for i in name:
-        if not check(label[pid == i]):
+        if not check(label[pid == i], filename):
             continue
         Data[i] = data[pid == i]
         Label[i] = label[pid == i]
     return Data, Label
 
 
-def create_sets(train_size):
+def create_sets():
     '''
     *** Description ***
 
@@ -44,9 +48,12 @@ def create_sets(train_size):
 
     Data = []
     TmpLabel = []
+    trainlen = 0
     files = ['cudb', 'mitdb', 'vfdb']
     for i in files:
         data, label = read_data(i)
+        if i != 'vfdb':
+            trainlen += len(label)
         Data.extend(data.values())
         TmpLabel.extend(label.values())
     Data = np.array(Data, dtype=object)
@@ -56,9 +63,9 @@ def create_sets(train_size):
     for i in TmpLabel:
         Label.append(list(int('VF/VT' in j) for j in i))
     Label = np.array(Label)
-    index = np.random.permutation(len(Label))
-    Data = Data[index]
-    Label = Label[index]
+    # index = np.random.permutation(len(Label))
+    # Data = Data[index]
+    # Label = Label[index]
 
     ## scale data
     for i in range(len(Data)):
@@ -67,7 +74,7 @@ def create_sets(train_size):
         tmp_mean = np.mean(tmp_data)
         Data[i] = (tmp_data - tmp_mean) / tmp_std
 
-    XTrain, XTest, YTrain, YTest = train_test_split(Data, Label, train_size=train_size, random_state=0)
+    XTrain, XTest, YTrain, YTest = Data[: trainlen + 10], Data[trainlen + 10 : ], Label[ : trainlen + 10], Label[trainlen + 10 : ]
     return XTrain, XTest, YTrain, YTest
 
 
@@ -136,8 +143,8 @@ def calc_rate(prob, label, threshold):
         precision = 0
     else:
         precision = TP / (TP + FP)
-    TPR = TP / (TP + FN)
-    TNR = 0 if TN == 0 else TN / (FP + TN)
+    TPR = 1 if TP+FN == 0 else TP / (TP + FN)
+    TNR = 1 if TN == 0 else TN / (FP + TN)
     FNR = 0 if FN == 0 else FN / (TP + FN)
     FPR = FP / (FP + TN)
     return accracy, precision, TPR, TNR, FNR, FPR

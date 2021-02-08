@@ -1,23 +1,23 @@
 
 
 maml = {
-    'device' : 'cuda:6',
+    'device' : 'cuda:7',
     'innerlr': 1e-3,
     'outerlr': 1e-3,
     'shots' : 5,  # shots, choice = [1,5]
     'tasks' : 25,
-    'update' : 20,
+    'update' : 5,
     'ways' : 2,
     'first_order' : True,
-    'batch_size' : 5,
-    'valid_step' : 10
+    'batch_size' : 4,
+    'valid_step' : 3
 }
 
 pretrain = {
     'lr' : 1e-3,
     'shots' : 5,
     'update' : 20,
-    'batch_size' : 1,
+    'batch_size' : 4,
     'ways' : 2
 }
 

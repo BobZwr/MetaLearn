@@ -106,14 +106,15 @@ class MAML(nn.Module):
     #
     # **
 
-    def __init__(self, model, data, label):
+    def __init__(self, model, data, label, innerlr = maml['innerlr'],outerlr = maml['outerlr'],update = maml['update'],first_order = maml['first_order'],\
+                 batch_size = maml['batch_size'], ways = maml['ways'], shots = maml['shots']):
         super(MAML, self).__init__()
         self.model = model
 
         self.train_x = data[ : len(data) * 3 // 4 - 1]
         self.train_y = label[ : len(label) * 3 // 4 - 1]
         self.valid_x = data[len(data) * 3 // 4 : ]
-        self.valid_y = data[len(data) * 3 // 4 : ]
+        self.valid_y = label[len(label) * 3 // 4 : ]
 
         self.innerlr = maml['innerlr']
         self.outerlr = maml['outerlr']
@@ -125,7 +126,8 @@ class MAML(nn.Module):
 
         self.device = torch.device(maml['device'] if torch.cuda.is_available() else 'cpu')
 
-
+    def forward(self, *args, **kwargs):
+        self.model(*args, **kwargs )
     def SampleTask(self):
         index = np.random.random_integers(low = 0, high = len(self.train_y) - 1)
         data = self.train_x[index]
@@ -153,7 +155,7 @@ class MAML(nn.Module):
 
         dataloader, dataloader_test = self.SampleTask()
         learner = self.model.clone()
-        init_entro = util.calc_entropy(self.train_x, learner, self.device)
+        #init_entro = util.calc_entropy(self.train_x, learner, self.device)
         loss_func = torch.nn.CrossEntropyLoss()
         sum_loss = 0.0
         for _ in tqdm(range(self.update), desc='update_num', leave=False, colour='white'):
@@ -173,10 +175,20 @@ class MAML(nn.Module):
                 loss = loss_func(pred, y)
                 sum_loss += loss / self.batch_size
 
-        final = util.calc_entropy(self.train_x, learner, device=self.device)
-        sum_loss = sum_loss / self.shots + (final - init_entro) * 0.5
+        #final = util.calc_entropy(self.train_x, learner, device=self.device)
+        sum_loss = sum_loss#  + (final - init_entro) * 2
 
         return sum_loss
+
+    def metavalid(self):
+        auc = []
+        acc = []
+        for index in range(len(self.valid_y)):
+            for times in range(maml['valid_step']):
+                temauc, temacc = self.valid_per_task(data = np.array(self.valid_x[index]), label = np.array(self.valid_y[index]))
+                auc.append(temauc)
+                acc.append(temacc)
+        return sum(auc) / len(auc), sum(acc) / len(acc)
 
     def valid_per_task(self, data, label):
         data = np.expand_dims(data, 1)
@@ -221,7 +233,7 @@ class MAML(nn.Module):
                 input_x, input_y = tuple(t.to(self.device) for t in batch)
                 pred = self.model(input_x)
                 pred = F.softmax(pred, dim=1)
-                pred_prob.append(pred[:, 1])
+                pred_prob.extend(pred[:, 1])
                 acc += sum(pred.argmax() == input_y)
                 acc_label.extend(list(int(i) for i in input_y))
         AUC = dp.roc_curve(pred_prob, acc_label)
